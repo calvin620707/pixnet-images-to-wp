@@ -1,2 +1,4 @@
 .env
 move_images/images/
+**/__pycache__/
+*.egg-info

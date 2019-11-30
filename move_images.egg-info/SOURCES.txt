@@ -1,9 +1,0 @@
-README.rst
-setup.py
-move_images/__init__.py
-move_images/app.py
-move_images.egg-info/PKG-INFO
-move_images.egg-info/SOURCES.txt
-move_images.egg-info/dependency_links.txt
-move_images.egg-info/requires.txt
-move_images.egg-info/top_level.txt
