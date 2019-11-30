@@ -21,7 +21,17 @@ def find_pixnet_image_urls(post_content: str) -> list:
 
 class PostStatus():
     TODO = 1
-    DONE = 2
+    DOWNLOADED = 2
+    UPLOADED = 3
+    DONE = 4
+
+    def to_str(self, status) -> str:
+        return {
+            self.TODO: 'Todo',
+            self.DOWNLOADED: 'Downloaded',
+            self.UPLOADED: 'Uploaded',
+            self.DONE: 'Done',
+        }[status]
 
 
 class PostStatusStore():
@@ -46,21 +56,25 @@ class PostStatusStore():
 
 
 class PostImageStore():
-    IMAGE_FOLDER = './images'
+    IMAGE_FOLDER = '{}/images'.format(os.path.dirname(os.path.abspath(__file__)))
     INDEX_FILE = f'{IMAGE_FOLDER}/index.json'
 
     def __init__(self):
         if not os.path.exists(self.IMAGE_FOLDER):
             os.mkdir(self.IMAGE_FOLDER)
 
-    def save_image(self, post_id: str, url: str):
-        index = collections.defaultdict(list)
+        self.index = collections.defaultdict(list)
         if os.path.exists(self.INDEX_FILE):
-            index.update(json.load(open(self.INDEX_FILE, 'r')))
+            self.index.update(json.load(open(self.INDEX_FILE, 'r')))
 
-        images = index[post_id]
-        if url in [i['url'] for i in images]:
-            print(f'URL existed. {url}')
+    def _update_index(self, post_id: str, url: str, data: dict):
+        self.index[post_id][url].update(data)
+        json.dump(self.index, open(self.INDEX_FILE, 'w'))
+
+    def save_image(self, post_id: str, url: str):
+        images = self.index[post_id]
+        if url in images:
+            print(f'Skip save_image because URL existed. {url}')
             return
 
         resp = requests.get(url)
@@ -74,5 +88,18 @@ class PostImageStore():
         with open(image_path, 'wb') as f:
             f.write(resp.content)
 
-        index[post_id].append({'url': url, 'file': image_path})
-        json.dump(index, open(self.INDEX_FILE, 'w'))
+        self._update_index(post_id, url, {'file': image_path})
+
+    def get_images(self, post_id: str):
+        return [(url, data['file'], data.get('image_id'))
+                for url, data in self.index[post_id].items()]
+
+    def set_wp_image_id(self, post_id: str, url: str, image_id: str):
+        self._update_index(post_id, url, {'image_id': image_id})
+
+    def get_wp_image_id(self, post_id: str, url: str):
+        ret = self.index[post_id][url].get('image_id')
+        if not ret:
+            raise KeyError
+
+        return ret

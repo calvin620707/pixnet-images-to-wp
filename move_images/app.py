@@ -1,13 +1,6 @@
-import os
+from .tasks import get_posts, update_post
 
-import requests.auth
-import requests_toolbelt.sessions
+# posts = get_posts()
 
-from .util import *
-
-client = requests_toolbelt.sessions.BaseUrlSession(
-    f"{os.environ['WP_URL'].strip('/')}/wp-json/wp/v2/")
-client.auth = requests.auth.HTTPBasicAuth(os.environ['WP_USER'],
-                                          os.environ['WP_PASSWORD'])
-
-posts = client.get('posts').json()
+# for p in posts[:1]:
+#     update_post(p)
