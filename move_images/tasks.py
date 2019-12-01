@@ -1,19 +1,19 @@
-import os
 import functools
+import os
 
 import requests.auth
 import requests_toolbelt.sessions
+from tqdm import tqdm
 
-from .util import (PostImageStore, PostStatus, PostStatusStore,
-                   find_pixnet_image_urls)
+from .util import find_pixnet_image_urls, post
 
 client = requests_toolbelt.sessions.BaseUrlSession(
     f"{os.environ['WP_URL'].strip('/')}/wp-json/wp/v2/")
 client.auth = requests.auth.HTTPBasicAuth(os.environ['WP_USER'],
                                           os.environ['WP_PASSWORD'])
 
-post_store = PostStatusStore()
-image_store = PostImageStore()
+post_store = post.StatusStore()
+image_store = post.ImageStore()
 
 PAGE_SIZE = 50
 
@@ -33,36 +33,44 @@ def get_posts():
         has_next = len(new) == PAGE_SIZE
         page += 1
 
+    for p in posts:
+        p['title'] = p['title']['rendered']
+
     print(f"Total post: {len(posts)}")
     return posts
 
 
-def update_post(post: dict):
-    print(f"Start updating {post['title']}")
+def update_post(post_obj: dict):
+    print(f"Start updating {post_obj['title']}")
     _download_images(post)
     _upload_images(post)
     _update_post_links(post)
 
 
-def check_status(current_status):
+def _task(current_status):
     def dec(fn):
-        @functools.wraps
-        def wrap(post: dict, *args, **kwargs):
-            p_status = post_store.get_status(post['id'])
-            if p_status >= current_status:
-                print("Skip. {} is {} and current status is {}.".format(
-                    post['title'], PostStatus.to_str(p_status),
-                    PostStatus.to_str(current_status)))
-                return
+        @functools.wraps(fn)
+        def wrap(post_obj: dict, *args, **kwargs):
+            try:
+                p_status = post_store.get(post_obj['id'])
+                if p_status >= current_status:
+                    msg = ("Skip. Post status is {} and current status is {}."
+                           " {}.".format(str(p_status), str(current_status),
+                                         post_obj['title']))
+                    print(msg)
+                    return
+            except KeyError:
+                print(f"Not status for {post_obj['id']}")
+                pass
 
-            print("{} starts for {}".format(PostStatus.to_str(current_status),
-                                            post['title']))
+            print("{} starts for {}".format(str(current_status),
+                                            post_obj['title']))
 
-            ret = fn(post, *args, **kwargs)
+            ret = fn(post_obj, *args, **kwargs)
 
-            post_store.update(post['id'], current_status)
-            print("{} finished for {}".format(
-                PostStatus.to_str(current_status), post['title']))
+            post_store.update(post_obj['id'], post.Status(current_status + 1))
+            print("{} finished for {}".format(str(current_status),
+                                              post_obj['title']))
             return ret
 
         return wrap
@@ -70,30 +78,32 @@ def check_status(current_status):
     return dec
 
 
-@check_status(PostStatus.DOWNLOADED)
-def _download_images(post: dict):
-    urls = find_pixnet_image_urls(post['content']['rendered'])
-    post_store.update(post['id'], PostStatus.TODO)
-    for u in urls:
-        print(f"Downloading {u}...")
-        image_store.save_image(post['id'], u)
+@_task(post.Status.DOWNLOADING)
+def _download_images(post_obj: dict):
+    urls = find_pixnet_image_urls(post_obj['content']['rendered'])
+    post_store.update(post_obj['id'], post.Status.TODO)
+    for u in tqdm(urls):
+        image_store.save_image(post_obj['id'], u)
 
 
-@check_status(PostStatus.UPLOADED)
-def _upload_images(post: dict):
-    for url, file_path, image_id in image_store.get_images(post['id']):
+@_task(post.Status.UPLOADING)
+def _upload_images(post_obj: dict):
+    images = tqdm(image_store.get_images(post_obj['id']))
+    for url, file_path, image_id in images:
         file_name = os.path.basename(file_path)
-        print(f"Uploading {file_name}...")
-        resp = client.post('media', files={file_name: open(file_path, 'rb')})
+        with open(file_path, 'rb') as f:
+            resp = client.post('media', files={file_name: f})
         assert resp.ok, f"Upload image failed. {resp} {resp.content}."
-        image_store.set_wp_image_id(post['id'], url, resp.json()['id'])
+        image_store.set_wp_image_id(post_obj['id'], url, resp.json()['id'])
 
 
-@check_status(PostStatus.DONE)
-def _update_post_links(post: dict):
-    content = client.get(f"posts/{post['id']}").json()['content']['rendered']
-    for url, _, image_id in image_store.get_images(post['id']):
+@_task(post.Status.UPDATING)
+def _update_post_links(post_obj: dict):
+    resp = client.get(f"posts/{post_obj['id']}")
+    content = resp.json()['content']['rendered']
+    for url, _, image_id in tqdm(image_store.get_images(post_obj['id'])):
         wp_image_url = client.get(f"media/{image_id}").json()['source_url']
         content = content.replace(url, wp_image_url)
-    resp = client.post(f"posts/{post['id']}", json={'content': content})
-    assert resp.ok, f"Failed to update {post['title']} {resp} {resp.content}."
+    resp = client.post(f"posts/{post_obj['id']}", json={'content': content})
+    assert resp.ok, "Failed to update {} {} {}.".format(
+        post_obj['title'], resp, resp.content)

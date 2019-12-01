@@ -8,6 +8,7 @@ authors = ["Calvin Wu <calvin620707@msn.com>"]
 python = "^3.8"
 requests = "^2.22.0"
 requests-toolbelt = "^0.9.1"
+tqdm = "^4.40.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
@@ -15,6 +16,7 @@ flake8 = "^3.7.9"
 isort = "^4.3.21"
 yapf = "^0.29.0"
 ipython = "^7.10.0"
+ipdb = "^0.12.2"
 
 [build-system]
 requires = ["poetry>=0.12"]
