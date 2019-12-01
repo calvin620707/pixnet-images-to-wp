@@ -65,10 +65,15 @@ class ImageStore():
     def __del__(self):
         self.index.close()
 
+    def _update_url(self, post_id, url, data):
+        images = self.index[post_id]
+        images[url].setdefault({})
+        images[url].update(data)
+        self.index[post_id] = images
+
     @handle_post_id
     def save_image(self, post_id: str, url: str):
-        self.index.setdefault(post_id, {})
-        images = self.index[post_id]
+        images = self.index.setdefault(post_id, {})
         if url in images:
             print(f'Skip save_image because URL existed. {url}')
             return
@@ -84,19 +89,16 @@ class ImageStore():
         with open(image_path, 'wb') as f:
             f.write(resp.content)
 
-        images.update({url: {'file': image_path}})
-        self.index[post_id] = images
+        self._update_url(post_id, url, {'file': image_path})
 
     @handle_post_id
     def get_images(self, post_id: str):
-        return [(url, data['file'], data.get('image_id'))
+        return [(url, data.get('file'), data.get('image_id'))
                 for url, data in self.index[post_id].items()]
 
     @handle_post_id
     def set_wp_image_id(self, post_id: str, url: str, image_id: str):
-        images = self.index[post_id]
-        images.update({url: {'image_id': image_id}})
-        self.index[post_id] = images
+        self._update_url(post_id, url, {'image_id': image_id})
 
     @handle_post_id
     def get_wp_image_id(self, post_id: str, url: str):

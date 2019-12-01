@@ -42,9 +42,9 @@ def get_posts():
 
 def update_post(post_obj: dict):
     print(f"Start updating {post_obj['title']}")
-    _download_images(post)
-    _upload_images(post)
-    _update_post_links(post)
+    _download_images(post_obj)
+    _upload_images(post_obj)
+    _update_post_links(post_obj)
 
 
 def _task(current_status):
@@ -82,17 +82,16 @@ def _task(current_status):
 def _download_images(post_obj: dict):
     urls = find_pixnet_image_urls(post_obj['content']['rendered'])
     post_store.update(post_obj['id'], post.Status.TODO)
-    for u in tqdm(urls):
+    for u in tqdm(urls, desc="Downloading"):
         image_store.save_image(post_obj['id'], u)
 
 
 @_task(post.Status.UPLOADING)
 def _upload_images(post_obj: dict):
-    images = tqdm(image_store.get_images(post_obj['id']))
+    images = tqdm(image_store.get_images(post_obj['id']), desc="Uploading")
     for url, file_path, image_id in images:
-        file_name = os.path.basename(file_path)
         with open(file_path, 'rb') as f:
-            resp = client.post('media', files={file_name: f})
+            resp = client.post('media', files={'file': f})
         assert resp.ok, f"Upload image failed. {resp} {resp.content}."
         image_store.set_wp_image_id(post_obj['id'], url, resp.json()['id'])
 
@@ -101,8 +100,9 @@ def _upload_images(post_obj: dict):
 def _update_post_links(post_obj: dict):
     resp = client.get(f"posts/{post_obj['id']}")
     content = resp.json()['content']['rendered']
-    for url, _, image_id in tqdm(image_store.get_images(post_obj['id'])):
-        wp_image_url = client.get(f"media/{image_id}").json()['source_url']
+    images = tqdm(image_store.get_images(post_obj['id']), desc="Updateing")
+    for url, _, image_id in images:
+        wp_image_url = client.get(f"media/{image_id}").json()['link']
         content = content.replace(url, wp_image_url)
     resp = client.post(f"posts/{post_obj['id']}", json={'content': content})
     assert resp.ok, "Failed to update {} {} {}.".format(

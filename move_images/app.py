@@ -1,4 +1,4 @@
-from move_images.tasks import _download_images, _upload_images, client
+from move_images.tasks import client, update_post
 
 # posts = get_posts()
 
@@ -8,5 +8,4 @@ from move_images.tasks import _download_images, _upload_images, client
 post = client.get('posts', params={'search': '香港觀光懶人包'}).json()
 post = post[0]
 post['title'] = post['title']['rendered']
-_download_images(post)
-_upload_images(post)
+update_post(post)
