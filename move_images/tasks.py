@@ -60,7 +60,8 @@ def _task(current_status):
                     print(msg)
                     return
             except KeyError:
-                print(f"Not status for {post_obj['id']}")
+                print(f"Not status for {post_obj['title']}")
+                post_store.update(post_obj['id'], post.Status.TODO)
                 pass
 
             print("{} starts for {}".format(str(current_status),
@@ -81,8 +82,7 @@ def _task(current_status):
 @_task(post.Status.DOWNLOADING)
 def _download_images(post_obj: dict):
     urls = find_pixnet_image_urls(post_obj['content']['rendered'])
-    post_store.update(post_obj['id'], post.Status.TODO)
-    for u in tqdm(urls, desc="Downloading"):
+    for u in tqdm(list(urls), desc="Downloading"):
         image_store.save_image(post_obj['id'], u)
 
 
@@ -100,7 +100,12 @@ def _upload_images(post_obj: dict):
 def _update_post_links(post_obj: dict):
     resp = client.get(f"posts/{post_obj['id']}")
     content = resp.json()['content']['rendered']
-    images = tqdm(image_store.get_images(post_obj['id']), desc="Updateing")
+    images = image_store.get_images(post_obj['id'])
+    if not images:
+        print("Skip. No need to update.")
+        return
+
+    images = tqdm(images, desc="Updateing")
     for url, _, image_id in images:
         wp_image_url = client.get(f"media/{image_id}").json()['link']
         content = content.replace(url, wp_image_url)

@@ -67,7 +67,7 @@ class ImageStore():
 
     def _update_url(self, post_id, url, data):
         images = self.index[post_id]
-        images[url].setdefault({})
+        images.setdefault(url, {})
         images[url].update(data)
         self.index[post_id] = images
 
@@ -79,9 +79,10 @@ class ImageStore():
             return
 
         resp = requests.get(url)
-        image_file_name = "{}{}".format(
-            uuid.uuid4().hex,
-            mimetypes.guess_extension(resp.headers['content-type']))
+        assert resp.ok, f"{resp} {resp.content}"
+        file_ext = mimetypes.guess_extension(resp.headers['content-type'])
+        assert file_ext, f"Unknown file type {resp.headers['content-type']}"
+        image_file_name = "{}{}".format(uuid.uuid4().hex, file_ext)
         image_path = f'{self.IMAGE_FOLDER}/{image_file_name}'
         if os.path.exists(image_path):
             raise RuntimeError(f"Image ID collision. {image_file_name}")
@@ -93,8 +94,11 @@ class ImageStore():
 
     @handle_post_id
     def get_images(self, post_id: str):
-        return [(url, data.get('file'), data.get('image_id'))
-                for url, data in self.index[post_id].items()]
+        if post_id in self.index:
+            return [(url, data.get('file'), data.get('image_id'))
+                    for url, data in self.index[post_id].items()]
+        else:
+            return []
 
     @handle_post_id
     def set_wp_image_id(self, post_id: str, url: str, image_id: str):

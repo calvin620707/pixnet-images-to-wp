@@ -1,11 +1,6 @@
-from move_images.tasks import client, update_post
+from move_images.tasks import get_posts, update_post
 
-# posts = get_posts()
+posts = get_posts()
 
-# for p in posts[:1]:
-#     update_post(p)
-
-post = client.get('posts', params={'search': '香港觀光懶人包'}).json()
-post = post[0]
-post['title'] = post['title']['rendered']
-update_post(post)
+for p in posts:
+    update_post(p)
