@@ -6,6 +6,7 @@ import uuid
 from enum import IntEnum, auto
 
 import requests
+import tenacity
 
 import move_images
 
@@ -71,6 +72,8 @@ class ImageStore():
         images[url].update(data)
         self.index[post_id] = images
 
+    @tenacity.retry(wait=tenacity.wait_exponential(),
+                    stop=tenacity.stop_after_attempt(10))
     @handle_post_id
     def save_image(self, post_id: str, url: str):
         images = self.index.setdefault(post_id, {})

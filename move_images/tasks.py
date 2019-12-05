@@ -4,6 +4,7 @@ import os
 import requests.auth
 import requests_toolbelt.sessions
 from tqdm import tqdm
+import tenacity
 
 from .util import find_pixnet_image_urls, post
 
@@ -54,24 +55,23 @@ def _task(current_status):
             try:
                 p_status = post_store.get(post_obj['id'])
                 if p_status >= current_status:
-                    msg = ("Skip. Post status is {} and current status is {}."
-                           " {}.".format(str(p_status), str(current_status),
-                                         post_obj['title']))
+                    msg = ("Skip. Post status is {} "
+                           "and current status is {}.".format(
+                               str(p_status), str(current_status)))
                     print(msg)
                     return
             except KeyError:
-                print(f"Not status for {post_obj['title']}")
+                print(f"Not status for the post.")
                 post_store.update(post_obj['id'], post.Status.TODO)
                 pass
 
-            print("{} starts for {}".format(str(current_status),
-                                            post_obj['title']))
+            print("{} starts.".format(str(current_status), post_obj['title']))
 
             ret = fn(post_obj, *args, **kwargs)
 
             post_store.update(post_obj['id'], post.Status(current_status + 1))
-            print("{} finished for {}".format(str(current_status),
-                                              post_obj['title']))
+            print("{} finished.".format(str(current_status),
+                                        post_obj['title']))
             return ret
 
         return wrap
@@ -88,12 +88,17 @@ def _download_images(post_obj: dict):
 
 @_task(post.Status.UPLOADING)
 def _upload_images(post_obj: dict):
-    images = tqdm(image_store.get_images(post_obj['id']), desc="Uploading")
-    for url, file_path, image_id in images:
+    @tenacity.retry(wait=tenacity.wait_exponential(),
+                    stop=tenacity.stop_after_attempt(10))
+    def upload_image(url, file_path, image_id):
         with open(file_path, 'rb') as f:
             resp = client.post('media', files={'file': f})
         assert resp.ok, f"Upload image failed. {resp} {resp.content}."
         image_store.set_wp_image_id(post_obj['id'], url, resp.json()['id'])
+
+    images = tqdm(image_store.get_images(post_obj['id']), desc="Uploading")
+    for url, file_path, image_id in images:
+        upload_image(url, file_path, image_id)
 
 
 @_task(post.Status.UPDATING)
