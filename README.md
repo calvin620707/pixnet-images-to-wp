@@ -8,7 +8,7 @@
 
 你的電腦需要下面的工具:
 
-* Python 3
+* [Python 3](https://www.python.org/downloads/)
 * [poetry](https://poetry.eustace.io/docs/#installation)
 
 然後你需要安裝下面這個WordPress plugin讓你可以使用帳號密碼去存取WordPress.
